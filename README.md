@@ -13,7 +13,7 @@ There are three tools in this repository:
 * Reads a standard EPUB.
 * Injects some CSS overrides to force font size and margins, and undo some publisher styling that doesn't work well on small displays.
 * Scales and pre-dithers images to 2bpp (so that we *don't* have to dither the anti-aliased text later, which would look awful).
-* Paginates the document and renders to PNGs, starting from `page_0000.png` to the specified output directory.
+* Paginates the document and renders to PNGs, starting from `page_0000.png`, in the specified output directory.
 * If the EPUB has author/title metadata, write these values to `author.txt` and `title.txt` in the specified output directory.
 
 [png_to_xtch.py](png_to_xtch.py):
@@ -28,7 +28,7 @@ There are three tools in this repository:
 
 The EPUB conversion tool is separated from the XTCH tools, because the EPUB-to-PNG flow is useful for other e-reader devices, but the XTCH format is somewhat specific to XTEINK devices.
 
-`epub_to_png.py` currently uses PyMuPDF for rendering, but this is unfortunately a dead end: custom font injection and 縦書き both impossible from Python bindings, and ruby text is essentially unsupported (there are some CSS hacks to improve it). It will likely move to headless browser rendering in the future.
+`epub_to_png.py` currently uses PyMuPDF for rendering, but this is unfortunately a dead end: custom font injection and 縦書き are both impossible from Python bindings, and ruby text is essentially unsupported (there are some CSS hacks to improve it). It will likely move to headless browser rendering in the future.
 
 ## Usage
 
@@ -42,11 +42,19 @@ pip install pymupdf pillow
 
 Convert an EPUB:
 
-```
+```bash
 ./epub_to_png.py my_book.epub --output output
 ```
 
-Creates a directory called `output/` containing rendered PNGs and `author.txt`/`title.txt` info files. Run `./epub_to_png.py --help` for more information on advanced options.
+This creates a directory called `output/` containing rendered PNGs and `author.txt`/`title.txt` info files. Run `./epub_to_png.py --help` for more information on advanced options.
+
+Have a look through the images in the output directory and make sure they formatted as you expect, then:
+
+```bash
+./png_to_xtch.py output
+```
+
+This reads the contents of the `output/` directory and packs it into a file called `output.xtch` (always has the same name as the directory).
 
 ## XTCH Format
 

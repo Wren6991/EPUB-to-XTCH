@@ -65,15 +65,11 @@ def build_css(args):
 
     return f"""
 @page {{
-    margin: 0 !important;
-    padding: 0 !important;
+    margin: {args.padding}px !important;
 }}
 
 {reset_css}
 
-html {{
-    padding: {args.padding}px !important;
-}}
 body {{
     line-height: {args.lineheight} !important;
 }}
@@ -285,7 +281,7 @@ def main():
     parser.add_argument("-o", "--output", default="output", help="Output directory for PNGs (default output/)")
     parser.add_argument("-W", "--width", type=int, default=480, help="Target page width (default 480)")
     parser.add_argument("-H", "--height", type=int, default=800, help="Target page height (default 800)")
-    parser.add_argument("-P", "--padding", type=int, default=0, help="Padding in pixels around text (default 0)")
+    parser.add_argument("-P", "--padding", type=int, default=5, help="Padding in pixels around text (default 5)")
     parser.add_argument("-F", "--fontsize", type=int, default=32, help="Font size in points (default 32)")
     parser.add_argument("-L", "--lineheight", type=float, default=1.4, help="Line height multiplier (default 1.4)")
     parser.add_argument("-y", "--yes", action="store_true", help="Automatically answer all confirmations with yes")
