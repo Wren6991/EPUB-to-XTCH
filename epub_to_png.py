@@ -89,9 +89,9 @@ img.reader-fullpage {{
     display: block !important;
     break-before: page !important;
     break-after: page !important;
-    max-width: {max_w}px !important;
-    max-height: {max_h}px !important;
-    margin: {args.padding}px auto !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: auto !important;
     object-fit: contain !important;
 }}
 img:not(.reader-fullpage) {{
