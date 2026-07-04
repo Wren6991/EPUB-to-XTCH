@@ -102,7 +102,22 @@ img:not(.reader-fullpage) {{
 }}
 """
 
-def process_img_tag(match, html_dir, file_data):
+def preprocess_fullpage_image(img_data, max_w, max_h):
+    """Scale image to fit screen size, and then dither to 2bpp. This allows dithering to be skipped
+    when converting rendered pages to 2bpp later, so only images are dithered, not text."""
+    img = Image.open(io.BytesIO(img_data))
+    img.thumbnail((max_w, max_h), Image.LANCZOS)
+
+    palette_img = Image.new('P', (4, 1))
+    palette_img.putpalette([0, 0, 0, 85, 85, 85, 170, 170, 170, 255, 255, 255])
+    img = img.quantize(palette=palette_img, dither=Image.Dither.FLOYDSTEINBERG)
+
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+
+    return buf.getvalue()
+
+def process_img_tag(match, html_dir, file_data, max_w, max_h, processed_images):
     """Apply a full-screen class to images over a certain size, and strip size attributes."""
     img_tag = match.group(0)
     src_match = re.search(r'(?:src|xlink:href|href)\s*=\s*["\']([^"\']+)["\']', img_tag, re.IGNORECASE)
@@ -120,20 +135,29 @@ def process_img_tag(match, html_dir, file_data):
             if w >= IMAGE_SIZE_FULLSCREEN_THRESHOLD or h >= IMAGE_SIZE_FULLSCREEN_THRESHOLD:
                 is_fullpage = True
         except Exception:
-            pass
+            print(f"Warning: could not determine size of image {img_path}, not applying reader-fullpage class", file=sys.stderr)
 
     if is_fullpage:
+        print(f"Processing fullscreen image {img_path}")
         img_tag = re.sub(r'\swidth\s*=\s*["\'][^"\']*["\']', '', img_tag, flags=re.IGNORECASE)
         img_tag = re.sub(r'\sheight\s*=\s*["\'][^"\']*["\']', '', img_tag, flags=re.IGNORECASE)
 
         if 'class=' in img_tag:
-            img_tag = re.sub(r'class\s*=\s*["\']', 'class="reader-fullpage ', img_tag, count=1, flags=re.IGNORECASE)
+            # Also strip existing classes (just render the image)
+            img_tag = re.sub(r'class\s*=\s*("[^"]*"|\'[^\']*\')', 'class="reader-fullpage"', img_tag, count=1, flags=re.IGNORECASE)
         else:
             img_tag = re.sub(r'(\s*/?>)$', ' class="reader-fullpage"\\1', img_tag)
 
+        if img_path not in processed_images:
+            try:
+                file_data[img_path] = preprocess_fullpage_image(file_data[img_path], max_w, max_h)
+                processed_images.add(img_path)
+            except Exception:
+                print(f"Warning: failed to preprocess image {img_path} for 2bpp dithering, it will be rendered at full depth", file=sys.stderr)
+
     return img_tag
 
-def process_svg_block(match, html_dir, file_data):
+def process_svg_block(match, html_dir, file_data, max_w, max_h, processed_images):
     """Replace <svg><image> combos with <img>, so it's laid out normally."""
     svg_block = match.group(0)
 
@@ -157,9 +181,16 @@ def process_svg_block(match, html_dir, file_data):
             if w >= IMAGE_SIZE_FULLSCREEN_THRESHOLD or h >= IMAGE_SIZE_FULLSCREEN_THRESHOLD:
                 is_fullpage = True
         except Exception:
-            pass
+            print(f"Warning: could not determine size of image {img_path}, not applying reader-fullpage class", file=sys.stderr)
 
     if is_fullpage:
+        print(f"Processing fullscreen image {img_path}")
+        if img_path not in processed_images:
+            try:
+                file_data[img_path] = preprocess_fullpage_image(file_data[img_path], max_w, max_h)
+                processed_images.add(img_path)
+            except Exception:
+                print(f"Warning: failed to preprocess image {img_path} for 2bpp dithering, it will be rendered at full depth", file=sys.stderr)
         return f'<img class="reader-fullpage" src="{src}" alt=""/>'
 
     return svg_block
@@ -170,32 +201,38 @@ def inject_css_and_heuristics(epub_bytes, args):
     in_buffer = io.BytesIO(epub_bytes)
     out_buffer = io.BytesIO()
 
-    with zipfile.ZipFile(in_buffer, 'r') as zin, \
-         zipfile.ZipFile(out_buffer, 'w', zipfile.ZIP_DEFLATED) as zout:
-
+    with zipfile.ZipFile(in_buffer, 'r') as zin:
         file_data = {item.filename: zin.read(item.filename) for item in zin.infolist()}
 
+    max_w = args.width - (args.padding * 2)
+    max_h = args.height - (args.padding * 2)
+    processed_images = set()
+
+    for filename, data in file_data.items():
+        if not filename.lower().endswith(('.xhtml', '.html', '.htm')):
+            continue
+
+        html_str = data.decode('utf-8', errors='ignore')
+
+        html_dir = posixpath.dirname(filename)
+        rel_css_path = posixpath.relpath(CSS_FILENAME, html_dir)
+        link_tag = f'<link rel="stylesheet" type="text/css" href="{rel_css_path}"/>'
+
+        if '</head>' in html_str:
+            html_str = html_str.replace('</head>', link_tag + '</head>', 1)
+        elif '<head' in html_str:
+            end_of_head_tag = html_str.find('>', html_str.find('<head')) + 1
+            html_str = html_str[:end_of_head_tag] + link_tag + html_str[end_of_head_tag:]
+
+        html_str = re.sub(r'<meta\s+name=["\']viewport["\'][^>]*>', '', html_str, flags=re.IGNORECASE)
+
+        html_str = re.sub(r'<img[^>]+>', lambda m: process_img_tag(m, html_dir, file_data, max_w, max_h, processed_images), html_str, flags=re.IGNORECASE)
+        html_str = re.sub(r'<svg[^>]*>.*?</svg>', lambda m: process_svg_block(m, html_dir, file_data, max_w, max_h, processed_images), html_str, flags=re.DOTALL | re.IGNORECASE)
+
+        file_data[filename] = html_str.encode('utf-8')
+
+    with zipfile.ZipFile(out_buffer, 'w', zipfile.ZIP_DEFLATED) as zout:
         for filename, data in file_data.items():
-            if filename.lower().endswith(('.xhtml', '.html', '.htm')):
-                html_str = data.decode('utf-8', errors='ignore')
-
-                html_dir = posixpath.dirname(filename)
-                rel_css_path = posixpath.relpath(CSS_FILENAME, html_dir)
-                link_tag = f'<link rel="stylesheet" type="text/css" href="{rel_css_path}"/>'
-
-                if '</head>' in html_str:
-                    html_str = html_str.replace('</head>', link_tag + '</head>', 1)
-                elif '<head' in html_str:
-                    end_of_head_tag = html_str.find('>', html_str.find('<head')) + 1
-                    html_str = html_str[:end_of_head_tag] + link_tag + html_str[end_of_head_tag:]
-
-                html_str = re.sub(r'<meta\s+name=["\']viewport["\'][^>]*>', '', html_str, flags=re.IGNORECASE)
-
-                html_str = re.sub(r'<img[^>]+>', lambda m: process_img_tag(m, html_dir, file_data), html_str, flags=re.IGNORECASE)
-                html_str = re.sub(r'<svg[^>]*>.*?</svg>', lambda m: process_svg_block(m, html_dir, file_data), html_str, flags=re.DOTALL | re.IGNORECASE)
-
-                data = html_str.encode('utf-8')
-
             zout.writestr(filename, data)
 
         zout.writestr(CSS_FILENAME, css_content)
