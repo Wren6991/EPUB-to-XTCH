@@ -237,7 +237,12 @@ def inject_css_and_heuristics(epub_bytes, args):
 
         zout.writestr(CSS_FILENAME, css_content)
 
-    return out_buffer.getvalue()
+    out_bytes = out_buffer.getvalue()
+    if args.preprocessed is not None:
+        print(f"Saving preprocessed EPUB to {args.preprocessed}...")
+        with open(args.preprocessed, "wb") as f:
+            f.write(out_bytes)
+    return out_bytes
 
 def confirm(prompt, args):
     if args.yes:
@@ -258,6 +263,7 @@ def main():
     parser.add_argument("-F", "--fontsize", type=int, default=32, help="Font size in points (default 32)")
     parser.add_argument("-L", "--lineheight", type=float, default=1.4, help="Line height multiplier (default 1.4)")
     parser.add_argument("-y", "--yes", action="store_true", help="Automatically answer all confirmations with yes")
+    parser.add_argument("-E", "--preprocessed", help="Path to save preprocessed EPUB (with CSS injection etc)")
     args = parser.parse_args()
 
     out_dir = Path(args.output)
