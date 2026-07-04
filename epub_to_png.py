@@ -20,6 +20,7 @@ import posixpath
 import re
 import shutil
 import sys
+import xml.etree.ElementTree as ET
 import zipfile
 
 from pathlib import Path
@@ -106,7 +107,10 @@ def preprocess_fullpage_image(img_data, max_w, max_h):
     """Scale image to fit screen size, and then dither to 2bpp. This allows dithering to be skipped
     when converting rendered pages to 2bpp later, so only images are dithered, not text."""
     img = Image.open(io.BytesIO(img_data))
-    img.thumbnail((max_w, max_h), Image.LANCZOS)
+    scale = min(max_w / img.width, max_h / img.height)
+    new_w = round(img.width * scale)
+    new_h = round(img.height * scale)
+    img = img.resize((new_w, new_h), Image.LANCZOS)
 
     palette_img = Image.new('P', (4, 1))
     palette_img.putpalette([0, 0, 0, 85, 85, 85, 170, 170, 170, 255, 255, 255])
@@ -244,6 +248,28 @@ def inject_css_and_heuristics(epub_bytes, args):
             f.write(out_bytes)
     return out_bytes
 
+
+def extract_opf_metadata(epub_bytes):
+    try:
+        with zipfile.ZipFile(io.BytesIO(epub_bytes)) as z:
+            opf_name = next(n for n in z.namelist() if n.endswith('.opf'))
+            opf = ET.fromstring(z.read(opf_name))
+    except Exception as e:
+        print(f"Warning: could not extract metadata: {e}", file=sys.stderr)
+        return None, None
+
+    NS = {'dc': 'http://purl.org/dc/elements/1.1/'}
+    title_el = opf.find('.//dc:title', NS)
+    creator_el = opf.find('.//dc:creator', NS)
+    title = title_el.text.strip() if title_el is not None and title_el.text else None
+    author = creator_el.text.strip() if creator_el is not None and creator_el.text else None
+    if title is None:
+        print("Warning: no dc:title found in OPF metadata", file=sys.stderr)
+    if author is None:
+        print("Warning: no dc:creator found in OPF metadata", file=sys.stderr)
+    return title, author
+
+
 def confirm(prompt, args):
     if args.yes:
         print(f"{prompt} -> automatic yes")
@@ -278,6 +304,14 @@ def main():
     print(f"Processing {args.input_epub}...")
     with open(args.input_epub, "rb") as f:
         original_bytes = f.read()
+
+    title, author = extract_opf_metadata(original_bytes)
+    if title:
+        print(f"Title: {title}")
+        (out_dir / 'title.txt').write_text(title)
+    if author:
+        print(f"Author: {author}")
+        (out_dir / 'author.txt').write_text(author)
 
     modified_bytes = original_bytes if args.skip_preprocess else inject_css_and_heuristics(original_bytes, args)
 
