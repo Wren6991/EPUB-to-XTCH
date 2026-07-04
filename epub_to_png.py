@@ -1,24 +1,47 @@
 #!/usr/bin/env python3
-import io
-import re
+
 import argparse
-import zipfile
+import fitz # PyMuPDF
+import io
 import posixpath
+import re
+import shutil
+import sys
+import zipfile
+
 from pathlib import Path
+from PIL import Image
 from urllib.parse import unquote
 
-from PIL import Image
-import fitz  # PyMuPDF
-
 CSS_FILENAME = "injected_reader_style.css"
-SIZE_THRESHOLD = 100
+IMAGE_SIZE_FULLSCREEN_THRESHOLD = 100
+OVERRIDE_TAG_FORMATTING = [
+    "html",
+    "body",
+    "div",
+    "section",
+    "main",
+    "article",
+    "aside",
+    "p",
+    "span",
+    "blockquote",
+    "li",
+    "a",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6"
+]
 
 def build_css(args):
     max_w = args.width - (args.padding * 2)
     max_h = args.height - (args.padding * 2)
     
     reset_css = ""
-    for tag in ["html", "body", "div", "section", "main", "article", "aside", "p", "span", "blockquote", "li", "a", "h1", "h2", "h3", "h4", "h5", "h6"]:
+    for tag in OVERRIDE_TAG_FORMATTING:
         reset_css += f"{tag} {{ margin: 0 !important; padding: 0 !important; border: none !important; font-size: {args.fontsize}pt !important; }}\n"
 
     return f"""
@@ -76,7 +99,7 @@ def process_img_tag(match, html_dir, file_data):
         try:
             img = Image.open(io.BytesIO(file_data[img_path]))
             w, h = img.size
-            if w >= SIZE_THRESHOLD or h >= SIZE_THRESHOLD:
+            if w >= IMAGE_SIZE_FULLSCREEN_THRESHOLD or h >= IMAGE_SIZE_FULLSCREEN_THRESHOLD:
                 is_fullpage = True
         except Exception:
             pass
@@ -113,7 +136,7 @@ def process_svg_block(match, html_dir, file_data):
         try:
             img = Image.open(io.BytesIO(file_data[img_path]))
             w, h = img.size
-            if w >= SIZE_THRESHOLD or h >= SIZE_THRESHOLD:
+            if w >= IMAGE_SIZE_FULLSCREEN_THRESHOLD or h >= IMAGE_SIZE_FULLSCREEN_THRESHOLD:
                 is_fullpage = True
         except Exception:
             pass
@@ -173,6 +196,12 @@ def main():
     args = parser.parse_args()
 
     out_dir = Path(args.output)
+    if out_dir.exists():
+        answer = input("Output directory already exist, overwrite y/n: ")
+        if answer.lower() == "y":
+            shutil.rmtree(out_dir)
+        else:
+            sys.exit("Refusing to overwrite existing output directory")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Processing {args.input_epub}...")
