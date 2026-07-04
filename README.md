@@ -1,6 +1,6 @@
 # EPUB to XTCH Conversion
 
-This repository contains tools for converting EPUBs to statically rendered [XTCH](https://gist.github.com/bdeshi/f605499fa5eaf6f69cf288c258dfafb4) image archives, for reading on low-cost e-reader devices like XTEINK X4.
+This repository contains tools for converting EPUBs to statically rendered [XTCH](reference/XTC-XTG-XTH-XTCH.md) image archives, for reading on low-cost e-reader devices like XTEINK X4.
 
 These devices have to make compromises on their CJK font rendering due to limited device RAM and processing power. However they have generous storage capacity (SD card), so pre-rendering the EPUB is a viable workaround.
 
@@ -40,3 +40,27 @@ Convert an EPUB:
 ```
 
 Creates a directory called `output/` containing rendered PNGs and `author.txt`/`title.txt` info files. Run `./epub_to_png.py --help` for more information on advanced options.
+
+## XTCH Format
+
+An XTCH file is a container format with:
+
+* A file header with:
+	* Basic document metadata
+	* A pointer to the page index array.
+* A page index array with pointers to pages.
+* Some pages, in XTH image format.
+
+An XTH image is a raw 2bpp bit-planed bitmap image, with a simple header.
+
+### Reference Material
+
+* [reference/XTC-XTG-XTH-XTCH.md](reference/XTC-XTG-XTH-XTCH.md)
+* [crosspoint-reader's XTC implementation](https://github.com/crosspoint-reader/crosspoint-reader/tree/develop/lib/Xtc/Xtc)
+
+We only care about the features supported by the [crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader) loader, and making sure that both crosspoint-reader and the official XTEINK firmware accept our files. This means the following features are ignored:
+
+* Compression.
+* MD5 checksums.
+* Colour modes besides monochrome.
+* Most of the document metadata fields.
