@@ -264,6 +264,7 @@ def main():
     parser.add_argument("-L", "--lineheight", type=float, default=1.4, help="Line height multiplier (default 1.4)")
     parser.add_argument("-y", "--yes", action="store_true", help="Automatically answer all confirmations with yes")
     parser.add_argument("-E", "--preprocessed", help="Path to save preprocessed EPUB (with CSS injection etc)")
+    parser.add_argument("--skip-preprocess", action="store_true", help="Use input_epub as-is, with no preprocessing.")
     args = parser.parse_args()
 
     out_dir = Path(args.output)
@@ -278,7 +279,7 @@ def main():
     with open(args.input_epub, "rb") as f:
         original_bytes = f.read()
 
-    modified_bytes = inject_css_and_heuristics(original_bytes, args)
+    modified_bytes = original_bytes if args.skip_preprocess else inject_css_and_heuristics(original_bytes, args)
 
     doc = fitz.open("epub", modified_bytes)
     doc.layout(width=args.width, height=args.height, fontsize=args.fontsize)
