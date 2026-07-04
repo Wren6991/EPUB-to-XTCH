@@ -98,10 +98,12 @@ def find_pages(in_dir):
 def main():
     parser = argparse.ArgumentParser(description=HELP, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("input_dir", help="Directory containing page_*.png, author.txt, title.txt")
-    parser.add_argument("-o", "--output", default="output.xtch", help="Output XTCH file (default output.xtch)")
+    parser.add_argument("-o", "--output", help="Output XTCH file (default (input_dir).xtch)")
     args = parser.parse_args()
 
     in_dir = Path(args.input_dir)
+    output = args.output if args.output is not None else f"{in_dir.resolve()}.xtch"
+
     pages = find_pages(in_dir)
 
     # Determine page dimensions from first page; assert all match.
@@ -121,7 +123,7 @@ def main():
     data_offset = XTCH_HEADER_SIZE + METADATA_SIZE
     index_offset_placeholder = 0  # patched at end
 
-    with open(args.output, "wb") as f:
+    with open(output, "wb") as f:
         # XTCH header (56 bytes), indexOffset patched later
         header = struct.pack(
             "<4sHHBBBBIQQQQQ",
@@ -178,7 +180,7 @@ def main():
         f.seek(0x18)
         f.write(struct.pack("<Q", index_offset))
 
-    print(f"Wrote {args.output} ({offset + len(index_entries) * INDEX_ENTRY_SIZE} bytes)")
+    print(f"Wrote {output} ({offset + len(index_entries) * INDEX_ENTRY_SIZE} bytes)")
 
 
 if __name__ == "__main__":

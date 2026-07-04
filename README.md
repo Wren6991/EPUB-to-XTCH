@@ -51,10 +51,10 @@ This creates a directory called `output/` containing rendered PNGs and `author.t
 Have a look through the images in the output directory and make sure they formatted as you expect, then:
 
 ```bash
-./png_to_xtch.py output
+./png_to_xtch.py output/
 ```
 
-This reads the contents of the `output/` directory and packs it into a file called `output.xtch` (always has the same name as the directory).
+This reads the contents of the `output/` directory and packs it into a file called `output.xtch`. By default the output file is a sibling of the input directory, and has the same name, with the suffix `.xtch`. Use the `-o` flag to specify a different output file path.
 
 ## XTCH Format
 
