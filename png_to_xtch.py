@@ -37,10 +37,9 @@ def pack_plane(plane_bits, w, h):
     oi = 0
     # Columns from right (x = w-1) to left (x = 0)
     for x in range(w - 1, -1, -1):
-        base = x
         for yg in range(0, h, 8):
+            row = x + yg * row_stride
             b = 0
-            row = base
             if plane_bits[row]:
                 b |= 0x80
             if plane_bits[row + row_stride]:
