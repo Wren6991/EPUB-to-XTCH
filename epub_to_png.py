@@ -184,6 +184,15 @@ def inject_css_and_heuristics(epub_bytes, args):
         
     return out_buffer.getvalue()
 
+def confirm(prompt, args):
+    if args.yes:
+        print(f"{prompt} -> automatic yes")
+        return True
+    while True:
+        answer = input(prompt + " (y/n) ")
+        if answer.lower() in "yn":
+            return answer.lower() == "y"
+
 def main():
     parser = argparse.ArgumentParser(description="Convert EPUB to paginated PNGs for e-readers.")
     parser.add_argument("input_epub", help="Path to the input EPUB file.")
@@ -193,12 +202,12 @@ def main():
     parser.add_argument("-P", "--padding", type=int, default=0, help="Padding in pixels around text (default 0)")
     parser.add_argument("-F", "--fontsize", type=int, default=32, help="Font size in points (default 32)")
     parser.add_argument("-L", "--lineheight", type=float, default=1.4, help="Line height multiplier (default 1.4)")
+    parser.add_argument("-y", "--yes", action="store_true", help="Automatically answer all confirmations with yes")
     args = parser.parse_args()
 
     out_dir = Path(args.output)
     if out_dir.exists():
-        answer = input("Output directory already exist, overwrite y/n: ")
-        if answer.lower() == "y":
+        if confirm("Output directory already exist, overwrite?", args):
             shutil.rmtree(out_dir)
         else:
             sys.exit("Refusing to overwrite existing output directory")
