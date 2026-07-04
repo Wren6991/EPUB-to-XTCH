@@ -23,6 +23,8 @@ There are two tools in this repository:
 
 The two tools are separated because the EPUB-to-PNG flow is useful for other e-reader devices, but the XTCH format is somewhat specific to XTEINK devices.
 
+`epub_to_png.py` currently uses PyMuPDF for rendering, but this is unfortunately a dead end: custom font injection and 縦書き both impossible from Python bindings, and ruby text is essentially unsupported (there are some CSS hacks to improve it). It will likely move to headless browser rendering in the future.
+
 ## Usage
 
 First, install dependencies:
