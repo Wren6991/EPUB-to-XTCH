@@ -19,11 +19,14 @@ from PIL import Image
 PALETTE_IMG = Image.new("P", (4, 1))
 PALETTE_IMG.putpalette([255, 255, 255, 85, 85, 85, 170, 170, 170, 0, 0, 0])
 
-# Bit extraction LUTs; these are inverted from the values I would expect, not
-# sure why (the above palette is correct when bits are extracted with direct
-# bitwise ops, so point() is doing something weird):
-LUT_BIT1 = bytes(0 if i & 0x2 else 255 for i in range(256))
-LUT_BIT0 = bytes(0 if i & 0x1 else 255 for i in range(256))
+# Bit extraction LUTs, to map palette-mode inputs to white or black depending
+# if a given bit is set. Can then extract the packed bits by converting to
+# 1bpp mode and calling .tobytes(). Note the output is *also* in paletted
+# space, so white/black (final 1/0) are indices into the above palette:
+IDX_BLACK = 3
+IDX_WHITE = 0
+LUT_BIT1 = bytes([IDX_WHITE if i & 0x2 else IDX_BLACK for i in range(256)])
+LUT_BIT0 = bytes([IDX_WHITE if i & 0x1 else IDX_BLACK for i in range(256)])
 
 XTCH_MARK = b"XTCH"
 XTH_MARK = b"XTH\0"
