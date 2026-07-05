@@ -15,9 +15,15 @@ from pathlib import Path
 from PIL import Image
 
 # Palette ordered so that the palette index equals the device pixel value
-# directly: 0=white, 1=dark grey, 2=light grey, 3=black.
+# directly: 0=white, 1=dark grey, 2=light grey, 3=black. (NOT sorted.)
 PALETTE_IMG = Image.new("P", (4, 1))
 PALETTE_IMG.putpalette([255, 255, 255, 85, 85, 85, 170, 170, 170, 0, 0, 0])
+
+# Bit extraction LUTs; these are inverted from the values I would expect, not
+# sure why (the above palette is correct when bits are extracted with direct
+# bitwise ops, so point() is doing something weird):
+LUT_BIT1 = bytes(0 if i & 0x2 else 255 for i in range(256))
+LUT_BIT0 = bytes(0 if i & 0x1 else 255 for i in range(256))
 
 XTCH_MARK = b"XTCH"
 XTH_MARK = b"XTH\0"
@@ -26,50 +32,17 @@ METADATA_SIZE = 256
 XTH_HEADER_SIZE = 22
 INDEX_ENTRY_SIZE = 16
 
-
-def pack_plane(pix_i8, mask, w, h):
-    """Pack one bitplane (a bytearray of length w*h, row-major, values 0/1)
-    into column-major bytes: columns right-to-left, 8 vertical pixels per
-    byte, MSB = topmost pixel. h must be a multiple of 8."""
-    assert h % 8 == 0, "height must be a multiple of 8"
-    out = bytearray(w * (h // 8))
-    row_stride = w
-    oi = 0
-    # Columns from right (x = w-1) to left (x = 0)
-    for x in range(w - 1, -1, -1):
-        for yg in range(0, h, 8):
-            row = x + yg * row_stride
-            b = 0
-            if mask & pix_i8[row]:
-                b |= 0x80
-            if mask & pix_i8[row + row_stride]:
-                b |= 0x40
-            if mask & pix_i8[row + 2 * row_stride]:
-                b |= 0x20
-            if mask & pix_i8[row + 3 * row_stride]:
-                b |= 0x10
-            if mask & pix_i8[row + 4 * row_stride]:
-                b |= 0x08
-            if mask & pix_i8[row + 5 * row_stride]:
-                b |= 0x04
-            if mask & pix_i8[row + 6 * row_stride]:
-                b |= 0x02
-            if mask & pix_i8[row + 7 * row_stride]:
-                b |= 0x01
-            out[oi] = b
-            oi += 1
-    return out
-
-
 def page_to_xth(img):
     """Convert a PIL page image to a full XTH page (header + two bitplanes)."""
-    q = img.quantize(palette=PALETTE_IMG, dither=Image.Dither.NONE)
-    w, h = q.size
+    img = img.quantize(palette=PALETTE_IMG, dither=Image.Dither.NONE)
+    w, h = img.size
     assert h % 8 == 0, f"page height {h} is not a multiple of 8"
-    data = q.tobytes()  # row-major, 1 byte per pixel, palette indices 0-3
-    plane1_bytes = pack_plane(data, 0x2, w, h)
-    plane2_bytes = pack_plane(data, 0x1, w, h)
-    data_size = len(plane1_bytes) + len(plane2_bytes)
+    # Rotate to match column-major output order:
+    img = img.transpose(Image.Transpose.ROTATE_90)
+    # Use LUTs to extract bit planes, then convert to 1bpp to pack the bits:
+    plane1_bytes = img.point(LUT_BIT1).convert("1", dither=Image.Dither.NONE).tobytes()
+    plane0_bytes = img.point(LUT_BIT0).convert("1", dither=Image.Dither.NONE).tobytes()
+    data_size = len(plane1_bytes) + len(plane0_bytes)
     header = struct.pack(
         "<4sHHBBIQ",
         XTH_MARK,
@@ -80,15 +53,13 @@ def page_to_xth(img):
         data_size,
         0,  # md5 (first 8 bytes, zero)
     )
-    return header + plane1_bytes + plane2_bytes, w, h
-
+    return header + plane1_bytes + plane0_bytes, w, h
 
 def find_pages(in_dir):
     pages = sorted(in_dir.glob("page_*.png"))
     if not pages:
         sys.exit(f"No page_*.png files found in {in_dir}")
     return pages
-
 
 def main():
     parser = argparse.ArgumentParser(description=HELP, formatter_class=argparse.RawTextHelpFormatter)
