@@ -27,7 +27,7 @@ XTH_HEADER_SIZE = 22
 INDEX_ENTRY_SIZE = 16
 
 
-def pack_plane(plane_bits, w, h):
+def pack_plane(pix_i8, mask, w, h):
     """Pack one bitplane (a bytearray of length w*h, row-major, values 0/1)
     into column-major bytes: columns right-to-left, 8 vertical pixels per
     byte, MSB = topmost pixel. h must be a multiple of 8."""
@@ -40,21 +40,21 @@ def pack_plane(plane_bits, w, h):
         for yg in range(0, h, 8):
             row = x + yg * row_stride
             b = 0
-            if plane_bits[row]:
+            if mask & pix_i8[row]:
                 b |= 0x80
-            if plane_bits[row + row_stride]:
+            if mask & pix_i8[row + row_stride]:
                 b |= 0x40
-            if plane_bits[row + 2 * row_stride]:
+            if mask & pix_i8[row + 2 * row_stride]:
                 b |= 0x20
-            if plane_bits[row + 3 * row_stride]:
+            if mask & pix_i8[row + 3 * row_stride]:
                 b |= 0x10
-            if plane_bits[row + 4 * row_stride]:
+            if mask & pix_i8[row + 4 * row_stride]:
                 b |= 0x08
-            if plane_bits[row + 5 * row_stride]:
+            if mask & pix_i8[row + 5 * row_stride]:
                 b |= 0x04
-            if plane_bits[row + 6 * row_stride]:
+            if mask & pix_i8[row + 6 * row_stride]:
                 b |= 0x02
-            if plane_bits[row + 7 * row_stride]:
+            if mask & pix_i8[row + 7 * row_stride]:
                 b |= 0x01
             out[oi] = b
             oi += 1
@@ -66,14 +66,9 @@ def page_to_xth(img):
     q = img.quantize(palette=PALETTE_IMG, dither=Image.Dither.NONE)
     w, h = q.size
     assert h % 8 == 0, f"page height {h} is not a multiple of 8"
-    data = q.tobytes()  # row-major palette indices 0-3
-    plane1 = bytearray(len(data))  # bit 1 of device value
-    plane2 = bytearray(len(data))  # bit 0 of device value
-    for i, v in enumerate(data):
-        plane1[i] = (v >> 1) & 1
-        plane2[i] = v & 1
-    plane1_bytes = pack_plane(plane1, w, h)
-    plane2_bytes = pack_plane(plane2, w, h)
+    data = q.tobytes()  # row-major, 1 byte per pixel, palette indices 0-3
+    plane1_bytes = pack_plane(data, 0x2, w, h)
+    plane2_bytes = pack_plane(data, 0x1, w, h)
     data_size = len(plane1_bytes) + len(plane2_bytes)
     header = struct.pack(
         "<4sHHBBIQ",
